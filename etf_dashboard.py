@@ -38,19 +38,30 @@ results = []
 for symbol in etfs:
     df = yf.download(symbol, start='2010-01-01')
 
-    # ✅ Skip if df is empty or missing critical columns
+    # ✅ Safety: Check if there's enough data
     if df.empty or 'Close' not in df.columns or len(df) < 252:
-        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close' prices.")
+        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close' column.")
         continue
 
-    # ✅ Copy to avoid warnings
     df = df.copy()
-    df['52w_high'] = df['Close'].rolling(window=252).max()
 
-    # ✅ Clean bad values
+    # ✅ Calculate 52-week high safely
+    try:
+        df['52w_high'] = df['Close'].rolling(window=252).max()
+    except Exception as e:
+        st.warning(f"Skipping {symbol}: Error calculating 52w_high – {e}")
+        continue
+
+    # ✅ Make sure columns exist before continuing
+    if '52w_high' not in df.columns:
+        st.warning(f"Skipping {symbol}: 52w_high not available.")
+        continue
+
+    # ✅ Clean up missing or bad data
     df = df[df['52w_high'] != 0]
-    df.dropna(subset=['Close', '52w_high'], inplace=True)
+    df = df.dropna(subset=['Close', '52w_high'])
 
+    # ✅ Calculate indicators
     df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
     df['RSI'] = compute_rsi(df)
     df.dropna(inplace=True)
@@ -77,6 +88,7 @@ for symbol in etfs:
                     'ROI (%)': round((profit / initial_capital) * 100, 2)
                 })
 
+# Show results
 if results:
     results_df = pd.DataFrame(results)
     st.success(f"Found {len(results_df)} qualifying trades.")
