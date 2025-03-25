@@ -47,30 +47,21 @@ for symbol in etfs:
         st.warning(f"Skipping {symbol}: '52w_high' missing.")
         continue
 
-    # ✅ Clean up missing or zero data safely
-    df = df[df['52w_high'].notna()]
-    df = df[df['Close'].notna()]
+    # ✅ Filter out rows with NaNs or non-numeric data
+    df = df[pd.to_numeric(df['Close'], errors='coerce').notna()]
+    df = df[pd.to_numeric(df['52w_high'], errors='coerce').notna()]
     df = df[df['52w_high'] != 0]
 
     if df.empty:
         st.warning(f"Skipping {symbol}: no valid data after cleaning.")
         continue
 
-    # Ensure both columns are numeric and not null
-if 'Close' not in df.columns or '52w_high' not in df.columns:
-    st.warning(f"Skipping {symbol}: Required columns missing.")
-    continue
-
-df = df[pd.to_numeric(df['Close'], errors='coerce').notna()]
-df = df[pd.to_numeric(df['52w_high'], errors='coerce').notna()]
-df = df[df['52w_high'] != 0]
-
-# Now it's safe to calculate drop_from_high
-try:
-    df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
-except Exception as e:
-    st.warning(f"Skipping {symbol}: Error calculating drop_from_high — {e}")
-    continue
+    # ✅ Try-safe drop calculation
+    try:
+        df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
+    except Exception as e:
+        st.warning(f"Skipping {symbol}: Error calculating drop_from_high — {e}")
+        continue
 
     df['RSI'] = compute_rsi(df)
     df = df[df['RSI'].notna()]
