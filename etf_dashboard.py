@@ -3,7 +3,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 import plotly.graph_objects as go
 
 # Title
@@ -21,47 +21,47 @@ rsi_threshold = st.sidebar.slider("RSI Threshold (Buy < X)", 10, 50, 30)
 holding_months = st.sidebar.slider("Holding Period (Months)", 6, 24, 14)
 initial_capital = st.sidebar.number_input("Starting Capital ($)", value=50000)
 
-# Function to calculate RSI
+# RSI function
 def compute_rsi(data, window=14):
     delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    gain = delta.where(delta > 0, 0).rolling(window=window).mean()
+    loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
     rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
 # Main
 st.markdown("### 🧠 Smart ETF Picks Based on Your Strategy")
-
 results = []
 
 for symbol in etfs:
     df = yf.download(symbol, start='2010-01-01')
 
-    # ✅ Safety: Check if there's enough data
+    # Skip if no data or not enough for 252-day history
     if df.empty or 'Close' not in df.columns or len(df) < 252:
-        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close' column.")
+        st.warning(f"Skipping {symbol}: not enough data or missing 'Close'.")
         continue
 
     df = df.copy()
+    df['52w_high'] = df['Close'].rolling(window=252).max()
 
-    # ✅ Calculate 52-week high safely
-    try:
-        df['52w_high'] = df['Close'].rolling(window=252).max()
-    except Exception as e:
-        st.warning(f"Skipping {symbol}: Error calculating 52w_high – {e}")
+    # Check again for necessary columns
+    if '52w_high' not in df.columns or 'Close' not in df.columns:
+        st.warning(f"Skipping {symbol}: '52w_high' or 'Close' missing.")
         continue
 
-    # ✅ Make sure columns exist before continuing
-    if '52w_high' not in df.columns:
-        st.warning(f"Skipping {symbol}: 52w_high not available.")
+    # Clean up invalid rows
+    df = df[(df['52w_high'] != 0)].copy()
+    if df.empty:
+        st.warning(f"Skipping {symbol}: no valid rows after 52w_high filter.")
         continue
 
-    # ✅ Clean up missing or bad data
-    df = df[df['52w_high'] != 0]
-    df = df.dropna(subset=['Close', '52w_high'])
+    # Safe dropna
+    if all(col in df.columns for col in ['Close', '52w_high']):
+        df = df.dropna(subset=['Close', '52w_high'])
+    else:
+        st.warning(f"Skipping {symbol}: required columns not present.")
+        continue
 
-    # ✅ Calculate indicators
     df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
     df['RSI'] = compute_rsi(df)
     df.dropna(inplace=True)
@@ -88,7 +88,7 @@ for symbol in etfs:
                     'ROI (%)': round((profit / initial_capital) * 100, 2)
                 })
 
-# Show results
+# Display results
 if results:
     results_df = pd.DataFrame(results)
     st.success(f"Found {len(results_df)} qualifying trades.")
@@ -99,7 +99,6 @@ if results:
     st.metric("Average ROI per Trade (%)", f"{avg_roi:.2f}%")
     st.metric("Total Profit ($)", f"${total_profit:,.2f}")
 
-    # Plot ROI distribution
     fig = go.Figure(data=[go.Histogram(x=results_df['ROI (%)'], nbinsx=20)])
     fig.update_layout(title='ROI % Distribution', xaxis_title='ROI %', yaxis_title='Frequency')
     st.plotly_chart(fig)
