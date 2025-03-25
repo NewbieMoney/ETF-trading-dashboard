@@ -36,35 +36,27 @@ results = []
 for symbol in etfs:
     df = yf.download(symbol, start='2010-01-01')
 
-    # Skip if no data or not enough for 252-day history
     if df.empty or 'Close' not in df.columns or len(df) < 252:
-        st.warning(f"Skipping {symbol}: not enough data or missing 'Close'.")
+        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close'.")
         continue
 
     df = df.copy()
     df['52w_high'] = df['Close'].rolling(window=252).max()
 
-    # Check again for necessary columns
-    if '52w_high' not in df.columns or 'Close' not in df.columns:
-        st.warning(f"Skipping {symbol}: '52w_high' or 'Close' missing.")
+    if '52w_high' not in df.columns:
+        st.warning(f"Skipping {symbol}: '52w_high' missing.")
         continue
 
-    # Clean up invalid rows
-    df = df[(df['52w_high'] != 0)].copy()
+    df = df[df['52w_high'].notna() & df['Close'].notna()]
+    df = df[df['52w_high'] != 0]
+
     if df.empty:
-        st.warning(f"Skipping {symbol}: no valid rows after 52w_high filter.")
-        continue
-
-    # Safe dropna
-    if all(col in df.columns for col in ['Close', '52w_high']):
-        df = df.dropna(subset=['Close', '52w_high'])
-    else:
-        st.warning(f"Skipping {symbol}: required columns not present.")
+        st.warning(f"Skipping {symbol}: no valid data after cleaning.")
         continue
 
     df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
     df['RSI'] = compute_rsi(df)
-    df.dropna(inplace=True)
+    df = df[df['RSI'].notna()]
 
     for i in range(len(df)):
         row = df.iloc[i]
