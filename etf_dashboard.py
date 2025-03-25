@@ -37,7 +37,7 @@ for symbol in etfs:
     df = yf.download(symbol, start='2010-01-01')
 
     if df.empty or 'Close' not in df.columns or len(df) < 252:
-        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close'.")
+        st.warning(f"Skipping {symbol}: not enough data or missing 'Close'.")
         continue
 
     df = df.copy()
@@ -47,7 +47,9 @@ for symbol in etfs:
         st.warning(f"Skipping {symbol}: '52w_high' missing.")
         continue
 
-    df = df[df['52w_high'].notna() & df['Close'].notna()]
+    # ✅ Clean up missing or zero data safely
+    df = df[df['52w_high'].notna()]
+    df = df[df['Close'].notna()]
     df = df[df['52w_high'] != 0]
 
     if df.empty:
