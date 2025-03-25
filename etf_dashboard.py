@@ -38,12 +38,19 @@ results = []
 for symbol in etfs:
     df = yf.download(symbol, start='2010-01-01')
 
-    # Skip if we don't have enough data
-    if df.empty or len(df) < 252:
-        st.warning(f"Not enough data for {symbol}. Skipping.")
+    # ✅ Skip if df is empty or missing critical columns
+    if df.empty or 'Close' not in df.columns or len(df) < 252:
+        st.warning(f"Skipping {symbol}: Not enough data or missing 'Close' prices.")
         continue
 
+    # ✅ Copy to avoid warnings
+    df = df.copy()
     df['52w_high'] = df['Close'].rolling(window=252).max()
+
+    # ✅ Clean bad values
+    df = df[df['52w_high'] != 0]
+    df.dropna(subset=['Close', '52w_high'], inplace=True)
+
     df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
     df['RSI'] = compute_rsi(df)
     df.dropna(inplace=True)
