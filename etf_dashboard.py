@@ -47,16 +47,15 @@ for symbol in etfs:
         st.warning(f"Skipping {symbol}: '52w_high' missing.")
         continue
 
-    # ✅ Filter out rows with NaNs or non-numeric data
-    df = df[pd.to_numeric(df['Close'], errors='coerce').notna()]
-    df = df[pd.to_numeric(df['52w_high'], errors='coerce').notna()]
+    # ✅ Convert to numeric using apply() to avoid TypeError
+    df = df[df['Close'].apply(pd.to_numeric, errors='coerce').notna()]
+    df = df[df['52w_high'].apply(pd.to_numeric, errors='coerce').notna()]
     df = df[df['52w_high'] != 0]
 
     if df.empty:
         st.warning(f"Skipping {symbol}: no valid data after cleaning.")
         continue
 
-    # ✅ Try-safe drop calculation
     try:
         df['drop_from_high'] = (df['Close'] - df['52w_high']) / df['52w_high']
     except Exception as e:
